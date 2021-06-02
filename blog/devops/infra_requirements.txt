@@ -1,0 +1,2 @@
+CherryPy==17.3.0
+Paste==3.2.1

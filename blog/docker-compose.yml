@@ -1,38 +1,61 @@
-version: "3"
+version: '3.6'
 
 services:
-    postgresdb:
-        build:
-            context: ./docker/postgres
-            dockerfile: Dockerfile
-        environment: 
-            - POSTGRES_PASSWORD=password
-        volumes: 
-            - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-        ports: 
-            - "5432:5432"
-        
-    web:
-        build:
-            context: ./
-            dockerfile: Dockerfile
-        volumes: 
-            - ./:/usr/src/app
-        depends_on: 
-            - postgresdb
-        ports: 
-            - "8000:8000"
 
-    
-    nginx:
-        build: 
-            context:  ./docker/nginx
-            dockerfile: Dockerfile
-        depends_on: 
-            - web
-            - postgresdb
-        ports: 
-            - "80:80"
-        volumes: 
-            - ./static/:/static
-        
+  db:
+    image: postgres:alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: admin
+      POSTGRES_DB: prod_db
+      restart: always
+    expose:
+      - 5432
+
+  web:
+    container_name: web
+    build: .
+    command: >
+      bash -c "python manage.py migrate --no-input
+      && python manage.py qcluster & gunicorn blog.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - .:/app
+      - static_volume:/app/static/
+    expose:
+      - 8000
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: always
+
+  nginx:
+    build: nginx
+    container_name: nginx
+    volumes:
+      - static_volume:/app/static/
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      - web
+    env_file:
+      - .env
+    command: /bin/sh -c "envsubst '$$DOMAIN_NAME $$PRERENDER_IO_TOKEN' < /etc/nginx/nginx.conf.template > /etc/nginx/conf.d/nginx.conf; while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\""
+    restart: always
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    restart: always
+
+volumes:
+  postgres_data:
+  static_volume:
