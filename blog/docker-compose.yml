@@ -19,7 +19,7 @@ services:
     build: .
     command: >
       bash -c "python manage.py migrate --no-input
-      && python manage.py qcluster & gunicorn blog.wsgi:application --bind 0.0.0.0:8000"
+      && gunicorn blog.wsgi:application --bind 0.0.0.0:8000"
     volumes:
       - .:/app
       - static_volume:/app/static/
