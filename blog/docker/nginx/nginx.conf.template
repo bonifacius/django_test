@@ -1,4 +1,4 @@
-upstream slim_game_api {
+upstream blog {
     server web:8000;
 }
 
